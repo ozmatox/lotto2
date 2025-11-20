@@ -4,16 +4,15 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      PATH: ${{ env.ANDROID_HOME }}/cmdline-tools/latest/bin:${{ env.ANDROID_HOME }}/platform-tools:$PATH
+      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk
+      PATH: /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
 
     steps:
     - name: Checkout repository
@@ -24,32 +23,26 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Create virtual environment
+    - name: Create virtualenv
       run: python3 -m venv venv
 
-    - name: Upgrade pip
-      run: venv/bin/pip install --upgrade pip setuptools wheel
-
-    - name: Install Buildozer and Cython
-      run: venv/bin/pip install --upgrade buildozer cython
-
-    - name: Accept Android SDK licenses
-      run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-
-    - name: Install required Android SDK packages
-      run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;36.1.0"
-
-    - name: Check Android SDK
+    - name: Upgrade pip and install Buildozer
       run: |
-        echo "SDK root: $ANDROID_SDK_ROOT"
-        ls -l $ANDROID_SDK_ROOT/build-tools
-        ls -l $ANDROID_SDK_ROOT/platforms
+        . venv/bin/activate
+        pip install --upgrade pip setuptools wheel
+        pip install cython==3.2.1 buildozer
 
-    - name: Build APK debug
-      run: venv/bin/python -m buildozer android debug
+    - name: Install Android SDK
+      run: |
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        cd $ANDROID_HOME/cmdline-tools
+        curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip commandlinetools.zip
+        mv cmdline-tools latest
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;36.1.0"
 
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: lotto2-debug-apk
-        path: bin/*.apk
+    - name: Build APK
+      run: |
+        . venv/bin/activate
+        buildozer android debug
