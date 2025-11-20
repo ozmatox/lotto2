@@ -1,0 +1,122 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    env:
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Cache pip
+      # -------------------------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-
+
+      # -------------------------
+      # Cache Android SDK
+      # -------------------------
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: android-sdk
+          key: android-sdk-cache-v1
+          restore-keys: android-sdk-cache-
+
+      # -------------------------
+      # Cache .buildozer
+      # -------------------------
+      - name: Cache Buildozer Data
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-cache-v1
+          restore-keys: buildozer-cache-
+
+      # -------------------------
+      # Python setup
+      # -------------------------
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # -------------------------
+      # System deps
+      # -------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y zip unzip openjdk-17-jdk git
+
+      # -------------------------
+      # Install Android SDK if missing
+      # -------------------------
+      - name: Install Android SDK
+        run: |
+          mkdir -p android-sdk
+          if [ ! -d "android-sdk/build-tools/36.1.0" ]; then
+            echo "Installing SDK"
+            cd android-sdk
+
+            wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
+            unzip tools.zip
+
+            mkdir -p cmdline-tools/latest
+            mv cmdline-tools/* cmdline-tools/latest/
+
+            export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+
+            yes | sdkmanager --licenses || true
+            yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;36.1.0"
+          else
+            echo "Using cached Android SDK"
+          fi
+
+      # -------------------------
+      # Install Buildozer
+      # -------------------------
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython
+
+      # -------------------------
+      # Build APK
+      # -------------------------
+      - name: Build APK
+        run: |
+          buildozer android release
+
+      # -------------------------
+      # Upload APK as artifact
+      # -------------------------
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: bin/*.apk
+
+      # -------------------------
+      # Create GitHub Release
+      # -------------------------
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
