@@ -2,49 +2,54 @@ name: Build Kivy Android APK
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk
-      PATH: ${{ github.workspace }}/venv/bin:$PATH
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      PATH: ${{ env.ANDROID_HOME }}/cmdline-tools/latest/bin:${{ env.ANDROID_HOME }}/platform-tools:$PATH
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      - name: Create virtual environment
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip buildozer cython
+    - name: Create virtual environment
+      run: python3 -m venv venv
 
-      - name: Initialize Buildozer
-        run: |
-          source venv/bin/activate
-          buildozer init || true
-          # Optional: modify buildozer.spec if needed
-          sed -i 's|source.dir = .*|source.dir = .|' buildozer.spec
-          sed -i 's|#p4a.bootstrap = .*|p4a.bootstrap = sdl2|' buildozer.spec
-          sed -i 's|#android.archs = .*|android.archs = armeabi-v7a, arm64-v8a|' buildozer.spec
+    - name: Upgrade pip
+      run: venv/bin/pip install --upgrade pip setuptools wheel
 
-      - name: Accept Android SDK Licenses
-        run: |
-          mkdir -p $ANDROID_SDK_ROOT/licenses
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $ANDROID_SDK_ROOT/licenses/android-sdk-license
+    - name: Install Buildozer and Cython
+      run: venv/bin/pip install --upgrade buildozer cython
 
-      - name: Build APK
-        run: |
-          source venv/bin/activate
-          buildozer android debug
+    - name: Accept Android SDK licenses
+      run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+
+    - name: Install required Android SDK packages
+      run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;36.1.0"
+
+    - name: Check Android SDK
+      run: |
+        echo "SDK root: $ANDROID_SDK_ROOT"
+        ls -l $ANDROID_SDK_ROOT/build-tools
+        ls -l $ANDROID_SDK_ROOT/platforms
+
+    - name: Build APK debug
+      run: venv/bin/python -m buildozer android debug
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: lotto2-debug-apk
+        path: bin/*.apk
