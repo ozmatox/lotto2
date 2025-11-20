@@ -2,47 +2,61 @@ name: Build Kivy Android APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk
-      PATH: /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+      ANDROID_HOME: ${{ runner.temp }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+      PATH: ${{ runner.temp }}/android-sdk/cmdline-tools/latest/bin:${{ runner.temp }}/android-sdk/platform-tools:${{ runner.temp }}/android-sdk/build-tools/36.1.0:$PATH
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Python
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          openjdk-17-jdk \
+          unzip \
+          wget \
+          tar \
+          python3-venv \
+          git \
+          curl \
+          zip \
+          build-essential
+
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: 3.10
 
     - name: Create virtualenv
       run: python3 -m venv venv
 
-    - name: Upgrade pip and install Buildozer
-      run: |
-        . venv/bin/activate
-        pip install --upgrade pip setuptools wheel
-        pip install cython==3.2.1 buildozer
+    - name: Upgrade pip
+      run: venv/bin/pip install --upgrade pip
 
-    - name: Install Android SDK
+    - name: Install Buildozer and Cython
+      run: venv/bin/pip install --upgrade buildozer cython
+
+    - name: Accept Android licenses and install SDK/NDK
       run: |
-        mkdir -p $ANDROID_HOME/cmdline-tools
-        cd $ANDROID_HOME/cmdline-tools
-        curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip commandlinetools.zip
-        mv cmdline-tools latest
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;36.1.0"
+        mkdir -p $ANDROID_HOME
+        cd $ANDROID_HOME
+        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+        unzip cmdline-tools.zip
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/
+        yes | cmdline-tools/latest/bin/sdkmanager --licenses
+        cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;36.1.0" "ndk;27.3.1"
 
     - name: Build APK
       run: |
-        . venv/bin/activate
-        buildozer android debug
+        venv/bin/buildozer android debug
